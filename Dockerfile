@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制项目文件
 COPY bot.py ./
 COPY database.py ./
-COPY .env ./
+# COPY .env ./  # 移除这行，不再打包 .env 文件
 
 # 设置容器启动命令
 CMD ["python", "bot.py"] 
