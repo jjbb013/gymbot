@@ -7,8 +7,9 @@ Database initialization and all data handling methods.
 
 import sqlite3
 from datetime import datetime
+import os
 
-DB_NAME = "gym_bot.db"
+DB_NAME = os.getenv("DB_PATH", "gym_bot.db")
 
 def get_db_connection():
     """Establishes a connection to the database."""
