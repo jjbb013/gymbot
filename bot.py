@@ -14,6 +14,14 @@ from functools import wraps
 from datetime import datetime
 from dotenv import load_dotenv # Import load_dotenv
 
+load_dotenv()  # 先加载 .env 文件
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
@@ -35,13 +43,6 @@ else:
         ADMIN_USER_IDS = [int(uid.strip()) for uid in ADMIN_USER_IDS_STR.split(',')]
     except ValueError:
         raise ValueError("ADMIN_USER_IDS environment variable must be a comma-separated list of integers.")
-
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
 
 # --- State & Patterns ---
 user_states = defaultdict(lambda: defaultdict(dict)) # {chat_id: {user_id: {exercise, weight, last_log_id}}}
@@ -283,7 +284,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def main() -> None:
     """Start the bot."""
-    load_dotenv() # Load environment variables from .env file
     db.init_db()
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
