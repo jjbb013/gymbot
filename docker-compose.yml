@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  gymbot:
+    # build 指令会使用当前目录下的 Dockerfile 来构建镜像
+    build: .
+    # 为容器命名，方便管理
+    container_name: gymbot_service
+    # 设置容器在退出时总是自动重启，保证服务高可用
+    restart: always
+    # env_file 指令会加载 .env 文件中的环境变量
+    # 您需要创建一个 .env 文件来存放您的 BOT_TOKEN
+    env_file:
+      - .env
+    # volumes 指令是数据持久化的关键
+    # 它会将您电脑上指定路径的 gym_bot.db 文件
+    # 挂载到容器内部 /app/gym_bot.db 的位置
+    # 这样，容器内对数据库的所有修改都会直接反映在您本地的文件上
+    volumes:
+      - /Users/will/gymbotDB/gym_bot.db:/app/gym_bot.db

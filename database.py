@@ -64,28 +64,44 @@ def get_training_summary(user_id: int, chat_id: int, period: str = 'week'):
     return summary
 
 def get_personal_record(user_id: int, exercise_name: str):
-    """Gets the personal record (max weight) for a specific exercise."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT MAX(weight_kg) as pr_weight FROM training_logs WHERE user_id = ? AND exercise_name = ?",
-        (user_id, exercise_name)
+    """获取指定锻炼项目的个人最佳纪录（最大重量），允许模糊匹配。"""
+    conn = get_db_connection()  # 获取数据库连接。
+    cursor = conn.cursor()  # 创建一个游标对象。
+    search_term = f'%{exercise_name}%'  # 创建模糊查询的搜索词，例如 '卧推' 会变成 '%卧推%'。
+    cursor.execute(  # 执行SQL查询。
+        "SELECT MAX(weight_kg) as pr_weight FROM training_logs WHERE user_id = ? AND exercise_name LIKE ?",  # SQL语句使用LIKE进行模糊匹配。
+        (user_id, search_term)  # 将用户ID和搜索词作为参数传入。
     )
-    pr = cursor.fetchone()
-    conn.close()
-    return pr['pr_weight'] if pr else None
+    pr = cursor.fetchone()  # 获取查询结果的第一条记录。
+    conn.close()  # 关闭数据库连接。
+    return pr['pr_weight'] if pr else None  # 如果查询到记录，则返回最大重量，否则返回None。
 
 def get_exercise_history(user_id: int, exercise_name: str, limit: int = 30):
-    """Gets the recent history for a specific exercise for charting."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT timestamp, weight_kg, reps FROM training_logs WHERE user_id = ? AND exercise_name = ? ORDER BY timestamp DESC LIMIT ?",
-        (user_id, exercise_name, limit)
+    """获取指定锻炼项目的最近历史记录，用于生成图表，允许模糊匹配。"""
+    conn = get_db_connection()  # 获取数据库连接。
+    cursor = conn.cursor()  # 创建一个游标对象。
+    search_term = f'%{exercise_name}%'  # 创建模糊查询的搜索词。
+    cursor.execute(  # 执行SQL查询。
+        "SELECT timestamp, weight_kg, reps, exercise_name FROM training_logs WHERE user_id = ? AND exercise_name LIKE ? ORDER BY timestamp DESC LIMIT ?",  # SQL语句使用LIKE进行模糊匹配，并额外查询exercise_name。
+        (user_id, search_term, limit)  # 将用户ID、搜索词和记录数量限制作为参数传入。
     )
-    history = cursor.fetchall()
-    conn.close()
-    return history
+    history = cursor.fetchall()  # 获取所有查询结果。
+    conn.close()  # 关闭数据库连接。
+    return history  # 返回历史记录列表。
+
+def count_sets_today(user_id: int, exercise_name: str) -> int:
+    """计算用户今天针对指定项目完成了多少组训练。"""
+    conn = get_db_connection()  # 获取数据库连接。
+    cursor = conn.cursor()  # 创建一个游标对象。
+    # 注意：这里使用精确匹配 exercise_name，以避免将“卧推”和“哑铃卧推”计为同一项目。
+    # 这样可以确保组数统计的精确性。
+    cursor.execute(
+        "SELECT COUNT(*) FROM training_logs WHERE user_id = ? AND exercise_name = ? AND date(timestamp) = date('now', 'localtime')",
+        (user_id, exercise_name)
+    )
+    count = cursor.fetchone()[0]  # 获取计数结果。
+    conn.close()  # 关闭数据库连接。
+    return count  # 返回组数。
 
 # --- Body Data & Metrics Functions ---
 

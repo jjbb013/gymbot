@@ -1,19 +1,17 @@
-# 使用官方 Python 运行时作为父镜像
+# 使用一个轻量级的 Python 官方镜像作为基础
 FROM python:3.11-slim
 
-# 设置工作目录
+# 设置容器内的工作目录
 WORKDIR /app
 
-# 复制依赖文件
-COPY requirements.txt ./
+# 将依赖文件复制到工作目录中
+COPY requirements.txt .
 
-# 安装依赖
+# 安装项目依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制项目文件
-COPY bot.py ./
-COPY database.py ./
-# COPY .env ./  # 移除这行，不再打包 .env 文件
+# 将项目代码复制到工作目录中
+COPY . .
 
-# 设置容器启动命令
-CMD ["python", "bot.py"] 
+# 设置容器启动时要执行的命令
+CMD ["python", "bot.py"]

@@ -9,6 +9,7 @@ import logging
 import re
 import urllib.parse
 import os # Import os module to access environment variables
+import json # 导入json库
 from collections import defaultdict
 from functools import wraps
 from datetime import datetime
@@ -138,12 +139,23 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("请提供要查询的训练项目, 例如: `/my_stats 卧推`")
         return
     
-    exercise_name = " ".join(context.args)
-    history = db.get_exercise_history(update.effective_user.id, exercise_name)
+    query_name = " ".join(context.args)
+    history = db.get_exercise_history(update.effective_user.id, query_name)
 
     if not history:
-        await update.message.reply_text(f"找不到关于“{exercise_name}”的训练记录.")
+        await update.message.reply_text(f"找不到关于“{query_name}”的训练记录.")
         return
+
+    # 动态生成图表标题
+    found_exercises = set(row['exercise_name'] for row in history)
+    if len(found_exercises) > 1:
+        chart_title = f'{query_name} (及相关) 负重趋势'
+        caption_text = f"这是您关于 *{query_name}* (及相关项目) 的训练趋势图."
+    else:
+        # 如果只有一个项目，就用数据库里精确的那个名字
+        exact_name = found_exercises.pop()
+        chart_title = f'{exact_name} 负重趋势'
+        caption_text = f"这是您最近的 *{exact_name}* 训练趋势图."
 
     dates = [datetime.strptime(row['timestamp'], '%Y-%m-%d %H:%M:%S').strftime('%m-%d') for row in reversed(history)]
     weights = [row['weight_kg'] for row in reversed(history)]
@@ -154,10 +166,11 @@ async def my_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             'labels': dates,
             'datasets': [{'label': '负重 (kg)', 'data': weights, 'fill': False, 'borderColor': '#4e73df'}]
         },
-        'options': {'title': {'display': True, 'text': f'{exercise_name} 负重趋势'}}
+        'options': {'title': {'display': True, 'text': chart_title}}
     }
-    chart_url = "https://quickchart.io/chart?c=" + urllib.parse.quote(str(chart_config))
-    await update.message.reply_photo(photo=chart_url, caption=f"这是您最近的 *{exercise_name}* 训练趋势图.", parse_mode='Markdown')
+    chart_url = "https://quickchart.io/chart?c=" + urllib.parse.quote(json.dumps(chart_config))
+    logger.info(f"Generated chart URL for my_stats: {chart_url}")  # 记录生成的URL用于调试
+    await update.message.reply_photo(photo=chart_url, caption=caption_text, parse_mode='Markdown')
 
 async def my_body_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
@@ -182,7 +195,8 @@ async def my_body_stats_command(update: Update, context: ContextTypes.DEFAULT_TY
         },
         'options': {'title': {'display': True, 'text': f'{metric_name} 变化趋势'}}
     }
-    chart_url = "https://quickchart.io/chart?c=" + urllib.parse.quote(str(chart_config))
+    chart_url = "https://quickchart.io/chart?c=" + urllib.parse.quote(json.dumps(chart_config))
+    logger.info(f"Generated chart URL for my_body_stats: {chart_url}") # 记录生成的URL用于调试
     await update.message.reply_photo(photo=chart_url, caption=f"这是您最近的 *{metric_name}* 数据趋势图.", parse_mode='Markdown')
 
 # --- Admin Commands ---
@@ -227,6 +241,11 @@ async def list_metrics_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_message = update.message.text
+    # 安全检查：如果消息以'/'开头，则忽略，防止命令被当作普通消息处理
+    if user_message.startswith('/'):
+        logger.warning(f"Command '{user_message}' was incorrectly passed to handle_message and was ignored.")
+        return
+
     user, chat_id = update.effective_user, update.effective_chat.id
     state = user_states[chat_id][user.id]
 
@@ -263,7 +282,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         
         log_id = db.add_training_log(user.id, chat_id, exercise_name, weight_kg, reps)
         state['last_log_id'] = log_id
-        await update.message.reply_text(f"记录成功: {exercise_name} {weight_kg}kg {reps}次.")
+        
+        # 获取今天此项目的总组数
+        set_count = db.count_sets_today(user.id, exercise_name)
+        
+        # 创建新的回复消息
+        reply_message = (
+            f"记录成功: {exercise_name} {weight_kg}kg {reps}次.\n"
+            f"💪 这是您今天完成的第 *{set_count}* 组 *{exercise_name}*."
+        )
+        await update.message.reply_text(reply_message, parse_mode='Markdown')
         return
 
     # Try to parse as body data
@@ -282,6 +310,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     logger.info(f"Message from {user.first_name} did not match any format: {user_message}")
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """记录所有未处理的异常。"""
+    logger.error("处理更新时发生异常", exc_info=context.error)
+
+
 def main() -> None:
     """Start the bot."""
     db.init_db()
@@ -298,6 +331,9 @@ def main() -> None:
     application.add_handler(CommandHandler("delete_metric", delete_metric_command))
     application.add_handler(CommandHandler("list_metrics", list_metrics_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # 注册全局错误处理器
+    application.add_error_handler(error_handler)
 
     logger.info("Bot is starting...")
     application.run_polling()
